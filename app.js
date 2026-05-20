@@ -6,6 +6,7 @@ const GH_REPO = 'writing_seeds_gh_repo';
 const GH_PATH = 'writing_seeds_gh_path';
 const GH_TOKEN = 'writing_seeds_gh_token';
 const GH_SHA = 'writing_seeds_gh_sha'; // 파일의 마지막 SHA (커밋용)
+const SPEECH_LANG = 'writing_seeds_speech_lang';
 
 // ===== STATE =====
 let seeds = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
@@ -13,6 +14,7 @@ let currentSeedId = null;
 let recognition = null;
 let isRecording = false;
 let pushTimer = null;
+let speechLang = localStorage.getItem(SPEECH_LANG) || 'ko-KR';
 
 // ===== DOM =====
 const $ = id => document.getElementById(id);
@@ -204,31 +206,46 @@ saveBtn.addEventListener('click', () => {
 });
 
 // ===== SPEECH =====
-function initSpeech() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    voiceStatus.textContent = '이 브라우저는 음성 인식을 지원하지 않습니다';
-    micBtn.style.opacity = '0.3';
-    micBtn.disabled = true;
-    return;
+const SR_CLASS = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+const VOICE_MESSAGES = {
+  'ko-KR': {
+    idle: '탭하여 음성으로 받아쓰기',
+    listening: '듣고 있습니다…',
+    unsupported: '이 브라우저는 음성 인식을 지원하지 않습니다',
+    retry: '잠시 후 다시 시도해주세요'
+  },
+  'en-US': {
+    idle: 'Tap to dictate',
+    listening: 'Listening…',
+    unsupported: 'Speech recognition not supported in this browser',
+    retry: 'Please try again in a moment'
   }
-  recognition = new SR();
-  recognition.lang = 'ko-KR';
-  recognition.continuous = true;
-  recognition.interimResults = true;
+};
+
+function msg(key) {
+  return (VOICE_MESSAGES[speechLang] || VOICE_MESSAGES['ko-KR'])[key];
+}
+
+function buildRecognition() {
+  if (!SR_CLASS) return null;
+  const r = new SR_CLASS();
+  r.lang = speechLang;
+  r.continuous = true;
+  r.interimResults = true;
 
   let finalTranscript = '';
   let startingText = '';
 
-  recognition.onstart = () => {
+  r.onstart = () => {
     isRecording = true;
     micBtn.classList.add('recording');
-    voiceStatus.textContent = '듣고 있습니다…';
+    voiceStatus.textContent = msg('listening');
     startingText = thoughtInput.value;
     finalTranscript = '';
   };
 
-  recognition.onresult = (e) => {
+  r.onresult = (e) => {
     let interim = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const transcript = e.results[i][0].transcript;
@@ -240,17 +257,62 @@ function initSpeech() {
     saveBtn.disabled = thoughtInput.value.trim().length === 0;
   };
 
-  recognition.onerror = (e) => {
+  r.onerror = (e) => {
     voiceStatus.textContent = `오류: ${e.error}`;
     stopRecording();
   };
 
-  recognition.onend = () => {
+  r.onend = () => {
     if (isRecording) {
-      try { recognition.start(); } catch(e) { stopRecording(); }
+      try { r.start(); } catch(e) { stopRecording(); }
     }
   };
+
+  return r;
 }
+
+function initSpeech() {
+  if (!SR_CLASS) {
+    voiceStatus.textContent = msg('unsupported');
+    micBtn.style.opacity = '0.3';
+    micBtn.disabled = true;
+    return;
+  }
+  recognition = buildRecognition();
+}
+
+// 언어 변경 시 인식기 재생성
+function changeLanguage(newLang) {
+  if (speechLang === newLang) return;
+  speechLang = newLang;
+  localStorage.setItem(SPEECH_LANG, newLang);
+
+  // 토글 버튼 UI 업데이트
+  document.querySelectorAll('.lang-opt').forEach(btn => {
+    const active = btn.dataset.lang === newLang;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+
+  // 녹음 중이었다면 중단하고 새 언어로 재시작
+  const wasRecording = isRecording;
+  if (isRecording) stopRecording();
+
+  recognition = buildRecognition();
+
+  if (!isRecording) {
+    voiceStatus.textContent = msg('idle');
+  }
+
+  if (wasRecording) {
+    setTimeout(() => startRecording(), 150);
+  }
+}
+
+// 언어 토글 버튼 핸들러
+document.querySelectorAll('.lang-opt').forEach(btn => {
+  btn.addEventListener('click', () => changeLanguage(btn.dataset.lang));
+});
 
 micBtn.addEventListener('click', () => {
   if (!recognition) { initSpeech(); if (!recognition) return; }
@@ -260,15 +322,23 @@ micBtn.addEventListener('click', () => {
 
 function startRecording() {
   try { recognition.start(); }
-  catch(e) { voiceStatus.textContent = '잠시 후 다시 시도해주세요'; }
+  catch(e) { voiceStatus.textContent = msg('retry'); }
 }
 
 function stopRecording() {
   isRecording = false;
   micBtn.classList.remove('recording');
-  voiceStatus.textContent = '탭하여 음성으로 받아쓰기';
+  voiceStatus.textContent = msg('idle');
   try { recognition.stop(); } catch(e) {}
 }
+
+// 초기 언어로 UI 셋업
+document.querySelectorAll('.lang-opt').forEach(btn => {
+  const active = btn.dataset.lang === speechLang;
+  btn.classList.toggle('active', active);
+  btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+});
+voiceStatus.textContent = msg('idle');
 
 initSpeech();
 

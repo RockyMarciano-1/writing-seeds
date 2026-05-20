@@ -130,6 +130,29 @@
   .mic-btn svg { width: 22px; height: 22px; }
   .voice-status { font-size: 13px; color: var(--ink-faint); letter-spacing: 0.05em; flex: 1; }
 
+  .lang-toggle {
+    display: flex;
+    border: 1px solid var(--paper-shadow);
+    background: var(--paper);
+    flex-shrink: 0;
+  }
+  .lang-opt {
+    background: transparent;
+    border: none;
+    padding: 6px 10px;
+    font-family: var(--serif-ko);
+    font-size: 11px;
+    color: var(--ink-faint);
+    cursor: pointer;
+    letter-spacing: 0.1em;
+    min-width: 32px;
+  }
+  .lang-opt + .lang-opt { border-left: 1px solid var(--paper-shadow); }
+  .lang-opt.active {
+    background: var(--ink);
+    color: var(--paper);
+  }
+
   .save-btn {
     width: 100%; margin-top: 16px; padding: 14px;
     background: var(--ink); color: var(--paper); border: none;
@@ -275,6 +298,10 @@
         </svg>
       </button>
       <div class="voice-status" id="voiceStatus">탭하여 음성으로 받아쓰기</div>
+      <div class="lang-toggle" role="group" aria-label="음성 인식 언어">
+        <button class="lang-opt active" data-lang="ko-KR" aria-pressed="true">한</button>
+        <button class="lang-opt" data-lang="en-US" aria-pressed="false">EN</button>
+      </div>
     </div>
   </div>
   <button class="save-btn" id="saveBtn" disabled>씨 앗  심  기</button>

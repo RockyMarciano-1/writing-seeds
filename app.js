@@ -1,12 +1,20 @@
-// ===== STATE =====
+// ===== STORAGE KEYS =====
 const STORAGE_KEY = 'writing_seeds_v1';
 const API_KEY_STORAGE = 'writing_seeds_api_key';
+const GH_OWNER = 'writing_seeds_gh_owner';
+const GH_REPO = 'writing_seeds_gh_repo';
+const GH_PATH = 'writing_seeds_gh_path';
+const GH_TOKEN = 'writing_seeds_gh_token';
+const GH_SHA = 'writing_seeds_gh_sha'; // 파일의 마지막 SHA (커밋용)
+
+// ===== STATE =====
 let seeds = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
 let currentSeedId = null;
 let recognition = null;
 let isRecording = false;
+let pushTimer = null;
 
-// ===== ELEMENTS =====
+// ===== DOM =====
 const $ = id => document.getElementById(id);
 const thoughtInput = $('thoughtInput');
 const micBtn = $('micBtn');
@@ -17,20 +25,164 @@ const seedsCount = $('seedsCount');
 const detailModal = $('detailModal');
 const settingsModal = $('settingsModal');
 const toast = $('toast');
+const syncBadge = $('syncBadge');
+const syncText = $('syncText');
 
 // ===== TABS =====
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
     const view = tab.dataset.view;
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === tab));
-    document.querySelectorAll('.view').forEach(v => {
-      v.classList.toggle('active', v.id === view + 'View');
-    });
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === view + 'View'));
     if (view === 'list') renderList();
   });
 });
 
-// ===== INPUT & SAVE =====
+// ===== LOCAL PERSIST =====
+function persistLocal() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(seeds));
+}
+
+// ===== GITHUB SYNC =====
+function ghConfig() {
+  return {
+    owner: localStorage.getItem(GH_OWNER) || '',
+    repo: localStorage.getItem(GH_REPO) || '',
+    path: localStorage.getItem(GH_PATH) || 'seeds.json',
+    token: localStorage.getItem(GH_TOKEN) || ''
+  };
+}
+
+function isGhConfigured() {
+  const c = ghConfig();
+  return c.owner && c.repo && c.token;
+}
+
+function setSyncStatus(state, text) {
+  syncBadge.classList.remove('synced', 'syncing', 'error');
+  if (state) syncBadge.classList.add(state);
+  syncText.textContent = text;
+}
+
+// UTF-8 안전 base64 인코딩 (한글 포함)
+function utf8ToBase64(str) {
+  return btoa(unescape(encodeURIComponent(str)));
+}
+function base64ToUtf8(b64) {
+  return decodeURIComponent(escape(atob(b64.replace(/\s/g, ''))));
+}
+
+// GitHub에서 불러오기
+async function pullFromGithub() {
+  if (!isGhConfigured()) {
+    showToast('먼저 설정에서 GitHub 정보를 입력해주세요');
+    return false;
+  }
+  const { owner, repo, path, token } = ghConfig();
+  setSyncStatus('syncing', '불러오는 중…');
+  try {
+    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`, {
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' }
+    });
+    if (res.status === 404) {
+      // 파일 없음 → 빈 상태 유지, SHA 클리어
+      localStorage.removeItem(GH_SHA);
+      setSyncStatus('synced', 'GitHub (빈 파일)');
+      showToast('GitHub에 아직 데이터 파일이 없습니다');
+      return true;
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    localStorage.setItem(GH_SHA, data.sha);
+    const json = base64ToUtf8(data.content);
+    const remote = JSON.parse(json);
+    if (Array.isArray(remote)) {
+      seeds = remote;
+      persistLocal();
+      renderList();
+      setSyncStatus('synced', 'GitHub 동기화됨');
+      showToast(`${remote.length}개의 씨앗을 불러왔습니다`);
+    } else {
+      throw new Error('파일 형식이 올바르지 않습니다');
+    }
+    return true;
+  } catch (err) {
+    console.error(err);
+    setSyncStatus('error', '오류');
+    showToast('불러오기 실패: ' + err.message);
+    return false;
+  }
+}
+
+// GitHub로 푸시
+async function pushToGithub() {
+  if (!isGhConfigured()) return false;
+  const { owner, repo, path, token } = ghConfig();
+  setSyncStatus('syncing', '동기화 중…');
+  try {
+    // 항상 최신 SHA를 먼저 가져온다 (충돌 회피)
+    let sha = localStorage.getItem(GH_SHA);
+    try {
+      const head = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`, {
+        headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' }
+      });
+      if (head.ok) {
+        const meta = await head.json();
+        sha = meta.sha;
+      } else if (head.status === 404) {
+        sha = null; // 새 파일
+      }
+    } catch(_) { /* 네트워크 오류면 캐시된 SHA로 진행 */ }
+
+    const content = utf8ToBase64(JSON.stringify(seeds, null, 2));
+    const body = {
+      message: `seeds: ${seeds.length} entries (${new Date().toISOString()})`,
+      content
+    };
+    if (sha) body.sha = sha;
+
+    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `token ${token}`,
+        Accept: 'application/vnd.github+json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.message || `HTTP ${res.status}`);
+    }
+    const result = await res.json();
+    localStorage.setItem(GH_SHA, result.content.sha);
+    setSyncStatus('synced', 'GitHub 동기화됨');
+    return true;
+  } catch (err) {
+    console.error(err);
+    setSyncStatus('error', '오류');
+    showToast('동기화 실패: ' + err.message);
+    return false;
+  }
+}
+
+// 변경 후 자동 푸시 (디바운스)
+function schedulePush() {
+  if (!isGhConfigured()) {
+    setSyncStatus('', '로컬');
+    return;
+  }
+  setSyncStatus('syncing', '대기 중…');
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(pushToGithub, 1500);
+}
+
+// ===== SAVE WORKFLOW =====
+function persist() {
+  persistLocal();
+  schedulePush();
+}
+
 thoughtInput.addEventListener('input', () => {
   saveBtn.disabled = thoughtInput.value.trim().length === 0;
 });
@@ -51,11 +203,7 @@ saveBtn.addEventListener('click', () => {
   showToast('씨앗을 심었습니다 · 種');
 });
 
-function persist() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(seeds));
-}
-
-// ===== SPEECH RECOGNITION =====
+// ===== SPEECH =====
 function initSpeech() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) {
@@ -84,14 +232,11 @@ function initSpeech() {
     let interim = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const transcript = e.results[i][0].transcript;
-      if (e.results[i].isFinal) {
-        finalTranscript += transcript;
-      } else {
-        interim += transcript;
-      }
+      if (e.results[i].isFinal) finalTranscript += transcript;
+      else interim += transcript;
     }
-    const separator = startingText && !startingText.endsWith(' ') && !startingText.endsWith('\n') ? ' ' : '';
-    thoughtInput.value = startingText + separator + finalTranscript + interim;
+    const sep = startingText && !startingText.endsWith(' ') && !startingText.endsWith('\n') ? ' ' : '';
+    thoughtInput.value = startingText + sep + finalTranscript + interim;
     saveBtn.disabled = thoughtInput.value.trim().length === 0;
   };
 
@@ -102,7 +247,6 @@ function initSpeech() {
 
   recognition.onend = () => {
     if (isRecording) {
-      // unexpected end during active recording; restart unless user stopped
       try { recognition.start(); } catch(e) { stopRecording(); }
     }
   };
@@ -115,11 +259,8 @@ micBtn.addEventListener('click', () => {
 });
 
 function startRecording() {
-  try {
-    recognition.start();
-  } catch(e) {
-    voiceStatus.textContent = '잠시 후 다시 시도해주세요';
-  }
+  try { recognition.start(); }
+  catch(e) { voiceStatus.textContent = '잠시 후 다시 시도해주세요'; }
 }
 
 function stopRecording() {
@@ -131,7 +272,7 @@ function stopRecording() {
 
 initSpeech();
 
-// ===== LIST RENDER =====
+// ===== LIST =====
 function renderList() {
   if (seeds.length === 0) {
     seedsCount.textContent = '';
@@ -163,8 +304,7 @@ function escapeHtml(s) {
 
 function formatDate(iso) {
   const d = new Date(iso);
-  const now = new Date();
-  const diff = (now - d) / 1000;
+  const diff = (new Date() - d) / 1000;
   if (diff < 60) return '방금 전';
   if (diff < 3600) return `${Math.floor(diff/60)}분 전`;
   if (diff < 86400) return `${Math.floor(diff/3600)}시간 전`;
@@ -173,7 +313,7 @@ function formatDate(iso) {
   return `${d.getFullYear()}.${m}.${day}`;
 }
 
-// ===== DETAIL MODAL =====
+// ===== DETAIL =====
 function openDetail(id) {
   const seed = seeds.find(s => s.id === id);
   if (!seed) return;
@@ -222,7 +362,7 @@ $('deleteBtn').addEventListener('click', () => {
   showToast('씨앗을 버렸습니다');
 });
 
-// ===== EXPANSION (Claude API) =====
+// ===== EXPANSION =====
 $('expandBtn').addEventListener('click', async () => {
   const apiKey = localStorage.getItem(API_KEY_STORAGE);
   if (!apiKey) {
@@ -310,55 +450,67 @@ ${seed.text}
 // ===== SETTINGS =====
 $('settingsBtn').addEventListener('click', () => {
   $('apiKeyInput').value = localStorage.getItem(API_KEY_STORAGE) || '';
+  $('ghOwnerInput').value = localStorage.getItem(GH_OWNER) || '';
+  $('ghRepoInput').value = localStorage.getItem(GH_REPO) || '';
+  $('ghPathInput').value = localStorage.getItem(GH_PATH) || 'seeds.json';
+  $('ghTokenInput').value = localStorage.getItem(GH_TOKEN) || '';
   settingsModal.classList.add('active');
 });
 
-$('closeSettings').addEventListener('click', () => {
-  const key = $('apiKeyInput').value.trim();
-  if (key) localStorage.setItem(API_KEY_STORAGE, key);
+$('closeSettings').addEventListener('click', async () => {
+  const apiKey = $('apiKeyInput').value.trim();
+  if (apiKey) localStorage.setItem(API_KEY_STORAGE, apiKey);
   else localStorage.removeItem(API_KEY_STORAGE);
+
+  const owner = $('ghOwnerInput').value.trim();
+  const repo = $('ghRepoInput').value.trim();
+  const path = $('ghPathInput').value.trim() || 'seeds.json';
+  const token = $('ghTokenInput').value.trim();
+
+  const wasConfigured = isGhConfigured();
+
+  if (owner) localStorage.setItem(GH_OWNER, owner); else localStorage.removeItem(GH_OWNER);
+  if (repo) localStorage.setItem(GH_REPO, repo); else localStorage.removeItem(GH_REPO);
+  localStorage.setItem(GH_PATH, path);
+  if (token) localStorage.setItem(GH_TOKEN, token); else localStorage.removeItem(GH_TOKEN);
+
   closeModal(settingsModal);
   showToast('설정이 저장되었습니다');
+
+  // 새로 GitHub 설정한 직후라면 한번 풀해서 동기화
+  if (!wasConfigured && isGhConfigured()) {
+    const ok = await pullFromGithub();
+    // pull 후 로컬에 데이터가 있고 원격이 비었으면 푸시
+    if (ok && seeds.length > 0 && !localStorage.getItem(GH_SHA)) {
+      pushToGithub();
+    }
+  } else if (isGhConfigured()) {
+    setSyncStatus('synced', 'GitHub 동기화됨');
+  } else {
+    setSyncStatus('', '로컬');
+  }
 });
 
 settingsModal.addEventListener('click', (e) => {
   if (e.target === settingsModal) closeModal(settingsModal);
 });
 
-// ===== EXPORT / IMPORT =====
-$('exportBtn').addEventListener('click', () => {
-  const blob = new Blob([JSON.stringify(seeds, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `writing-seeds-${new Date().toISOString().slice(0,10)}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+// ===== MANUAL SYNC BUTTONS =====
+$('syncBtn').addEventListener('click', () => {
+  if (!isGhConfigured()) {
+    showToast('먼저 설정에서 GitHub 정보를 입력해주세요');
+    return;
+  }
+  pushToGithub().then(ok => { if (ok) showToast('GitHub에 동기화 완료'); });
 });
 
-$('importBtn').addEventListener('click', () => $('importFile').click());
-
-$('importFile').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  try {
-    const text = await file.text();
-    const imported = JSON.parse(text);
-    if (!Array.isArray(imported)) throw new Error('잘못된 형식');
-    if (confirm(`${imported.length}개의 씨앗을 가져옵니다. 기존 데이터에 추가하시겠습니까? (취소 = 덮어쓰기)`)) {
-      const existingIds = new Set(seeds.map(s => s.id));
-      imported.forEach(s => { if (!existingIds.has(s.id)) seeds.push(s); });
-    } else {
-      seeds = imported;
-    }
-    seeds.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-    persist();
-    showToast('가져오기 완료');
-    renderList();
-  } catch (err) {
-    showToast('가져오기 실패: ' + err.message);
+$('pullBtn').addEventListener('click', async () => {
+  if (!isGhConfigured()) {
+    showToast('먼저 설정에서 GitHub 정보를 입력해주세요');
+    return;
   }
-  e.target.value = '';
+  if (seeds.length > 0 && !confirm('현재 기기의 씨앗이 GitHub의 내용으로 덮어씌워집니다. 계속할까요?')) return;
+  await pullFromGithub();
 });
 
 // ===== TOAST =====
@@ -370,5 +522,13 @@ function showToast(msg) {
   toastTimer = setTimeout(() => toast.classList.remove('show'), 2400);
 }
 
-// initial render
-renderList();
+// ===== INIT =====
+(async function init() {
+  renderList();
+  if (isGhConfigured()) {
+    // 시작 시 자동으로 원격에서 최신본 가져오기
+    await pullFromGithub();
+  } else {
+    setSyncStatus('', '로컬');
+  }
+})();

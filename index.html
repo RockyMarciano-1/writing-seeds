@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#f4ede0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>글의 씨앗 · 字種</title>
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;500;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f4ede0;
+    --paper-deep: #ebe0cc;
+    --paper-shadow: #d9c9a8;
+    --ink: #1a1614;
+    --ink-soft: #3d342d;
+    --ink-faint: #756656;
+    --vermillion: #a8341c;
+    --vermillion-deep: #7a2412;
+    --moss: #4a5d3a;
+    --gold: #b8893d;
+    --serif-ko: 'Noto Serif KR', serif;
+    --serif-en: 'Cormorant Garamond', serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--serif-ko);
+    overscroll-behavior: none;
+    min-height: 100vh;
+  }
+
+  body {
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(184, 137, 61, 0.06), transparent 40%),
+      radial-gradient(circle at 80% 90%, rgba(168, 52, 28, 0.04), transparent 40%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.08 0 0 0 0 0.06 0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
+    padding-bottom: 100px;
+    padding-top: env(safe-area-inset-top);
+  }
+
+  /* ============ HEADER ============ */
+  header {
+    padding: 32px 24px 20px;
+    text-align: center;
+    position: relative;
+  }
+
+  .title-block {
+    display: inline-block;
+    position: relative;
+  }
+
+  .title-hanja {
+    font-family: var(--serif-ko);
+    font-weight: 300;
+    font-size: 14px;
+    letter-spacing: 0.4em;
+    color: var(--vermillion);
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-family: var(--serif-ko);
+    font-weight: 500;
+    font-size: 30px;
+    letter-spacing: 0.05em;
+    color: var(--ink);
+    line-height: 1.1;
+  }
+
+  .title-en {
+    font-family: var(--serif-en);
+    font-style: italic;
+    font-size: 13px;
+    color: var(--ink-faint);
+    margin-top: 8px;
+    letter-spacing: 0.1em;
+  }
+
+  .seal {
+    position: absolute;
+    top: 28px;
+    right: 24px;
+    width: 38px;
+    height: 38px;
+    background: var(--vermillion);
+    color: var(--paper);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 700;
+    border-radius: 4px;
+    transform: rotate(-4deg);
+    box-shadow: 0 2px 0 var(--vermillion-deep);
+    cursor: pointer;
+    border: none;
+  }
+
+  .seal::before {
+    content: '';
+    position: absolute;
+    inset: 3px;
+    border: 1px solid var(--paper);
+    border-radius: 2px;
+  }
+
+  /* ============ TABS ============ */
+  .tabs {
+    display: flex;
+    justify-content: center;
+    gap: 0;
+    margin: 12px 24px 24px;
+    border-bottom: 1px solid var(--paper-shadow);
+  }
+
+  .tab {
+    background: none;
+    border: none;
+    padding: 12px 20px;
+    font-family: var(--serif-ko);
+    font-size: 15px;
+    color: var(--ink-faint);
+    cursor: pointer;
+    position: relative;
+    letter-spacing: 0.1em;
+  }
+
+  .tab.active {
+    color: var(--ink);
+    font-weight: 500;
+  }
+
+  .tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    height: 2px;
+    background: var(--vermillion);
+  }
+
+  /* ============ CAPTURE VIEW ============ */
+  .view { padding: 0 24px; display: none; }
+  .view.active { display: block; }
+
+  .capture-card {
+    background: var(--paper-deep);
+    border: 1px solid var(--paper-shadow);
+    border-radius: 2px;
+    padding: 24px 20px;
+    position: relative;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.04), inset 0 0 0 1px rgba(255,255,255,0.4);
+  }
+
+  .capture-card::before {
+    content: '';
+    position: absolute;
+    top: 8px; left: 8px; right: 8px; bottom: 8px;
+    border: 1px dashed var(--paper-shadow);
+    pointer-events: none;
+    border-radius: 1px;
+  }
+
+  textarea#thoughtInput {
+    width: 100%;
+    min-height: 140px;
+    background: transparent;
+    border: none;
+    outline: none;
+    font-family: var(--serif-ko);
+    font-size: 17px;
+    line-height: 1.7;
+    color: var(--ink);
+    resize: none;
+    position: relative;
+    z-index: 1;
+  }
+
+  textarea#thoughtInput::placeholder {
+    color: var(--ink-faint);
+    opacity: 0.6;
+    font-style: italic;
+  }
+
+  .voice-area {
+    margin-top: 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .mic-btn {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--ink);
+    color: var(--paper);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    flex-shrink: 0;
+    position: relative;
+  }
+
+  .mic-btn:active { transform: scale(0.95); }
+
+  .mic-btn.recording {
+    background: var(--vermillion);
+    animation: pulse 1.4s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(168, 52, 28, 0.5); }
+    50% { box-shadow: 0 0 0 14px rgba(168, 52, 28, 0); }
+  }
+
+  .mic-btn svg { width: 22px; height: 22px; }
+
+  .voice-status {
+    font-size: 13px;
+    color: var(--ink-faint);
+    letter-spacing: 0.05em;
+    flex: 1;
+  }
+
+  .save-btn {
+    width: 100%;
+    margin-top: 16px;
+    padding: 14px;
+    background: var(--ink);
+    color: var(--paper);
+    border: none;
+    font-family: var(--serif-ko);
+    font-size: 15px;
+    letter-spacing: 0.3em;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-indent: 0.3em;
+  }
+
+  .save-btn:active { transform: translateY(1px); }
+  .save-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .hint {
+    margin-top: 14px;
+    text-align: center;
+    font-family: var(--serif-en);
+    font-style: italic;
+    font-size: 13px;
+    color: var(--ink-faint);
+  }
+
+  /* ============ LIST VIEW ============ */
+  .seeds-count {
+    font-family: var(--serif-en);
+    font-size: 13px;
+    color: var(--ink-faint);
+    text-align: center;
+    margin-bottom: 16px;
+    font-style: italic;
+    letter-spacing: 0.1em;
+  }
+
+  .seed {
+    background: var(--paper-deep);
+    border-left: 3px solid var(--vermillion);
+    margin-bottom: 14px;
+    padding: 16px 16px 14px 18px;
+    cursor: pointer;
+    position: relative;
+    box-shadow: 1px 1px 0 rgba(0,0,0,0.04);
+    transition: transform 0.15s;
+  }
+
+  .seed:active { transform: translateX(2px); }
+
+  .seed-text {
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--ink);
+    margin-bottom: 8px;
+    /* clamp to ~3 lines */
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .seed-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    color: var(--ink-faint);
+    font-family: var(--serif-en);
+    letter-spacing: 0.1em;
+  }
+
+  .seed-tag {
+    background: var(--paper);
+    color: var(--vermillion);
+    padding: 2px 8px;
+    border: 1px solid var(--paper-shadow);
+    font-family: var(--serif-ko);
+    font-size: 10px;
+  }
+
+  .empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--ink-faint);
+    font-style: italic;
+  }
+
+  .empty-char {
+    font-size: 48px;
+    color: var(--paper-shadow);
+    margin-bottom: 16px;
+    font-family: var(--serif-ko);
+  }
+
+  /* ============ DETAIL MODAL ============ */
+  .modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(26, 22, 20, 0.5);
+    backdrop-filter: blur(4px);
+    z-index: 100;
+    display: none;
+    align-items: flex-end;
+    animation: fadeIn 0.2s;
+  }
+
+  .modal.active { display: flex; }
+
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+  .modal-content {
+    background: var(--paper);
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 12px 12px 0 0;
+    padding: 24px 24px 32px;
+    overflow-y: auto;
+    animation: slideUp 0.3s ease-out;
+    box-shadow: 0 -10px 40px rgba(0,0,0,0.15);
+    padding-bottom: calc(32px + env(safe-area-inset-bottom));
+  }
+
+  .modal-handle {
+    width: 40px;
+    height: 4px;
+    background: var(--paper-shadow);
+    border-radius: 2px;
+    margin: 0 auto 20px;
+  }
+
+  .modal-date {
+    font-family: var(--serif-en);
+    font-style: italic;
+    font-size: 12px;
+    color: var(--ink-faint);
+    letter-spacing: 0.15em;
+    margin-bottom: 12px;
+  }
+
+  .modal-text {
+    font-size: 17px;
+    line-height: 1.8;
+    color: var(--ink);
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--paper-shadow);
+    margin-bottom: 20px;
+    white-space: pre-wrap;
+  }
+
+  .modal-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .action-btn {
+    padding: 12px;
+    background: var(--paper-deep);
+    border: 1px solid var(--paper-shadow);
+    color: var(--ink);
+    font-family: var(--serif-ko);
+    font-size: 13px;
+    cursor: pointer;
+    letter-spacing: 0.1em;
+  }
+
+  .action-btn.primary {
+    background: var(--ink);
+    color: var(--paper);
+    border-color: var(--ink);
+    grid-column: 1 / -1;
+  }
+
+  .action-btn.danger {
+    color: var(--vermillion);
+  }
+
+  .expansion {
+    background: var(--paper-deep);
+    padding: 18px;
+    margin-top: 12px;
+    border-left: 3px solid var(--gold);
+    position: relative;
+  }
+
+  .expansion-label {
+    font-size: 11px;
+    color: var(--gold);
+    letter-spacing: 0.2em;
+    margin-bottom: 10px;
+    font-weight: 500;
+  }
+
+  .expansion-content {
+    font-size: 14px;
+    line-height: 1.75;
+    color: var(--ink-soft);
+    white-space: pre-wrap;
+  }
+
+  .loading-dots {
+    display: inline-flex;
+    gap: 4px;
+  }
+
+  .loading-dots span {
+    width: 6px;
+    height: 6px;
+    background: var(--ink-faint);
+    border-radius: 50%;
+    animation: bounce 1.4s infinite;
+  }
+
+  .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+    30% { transform: translateY(-6px); opacity: 1; }
+  }
+
+  /* ============ TOAST ============ */
+  .toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--ink);
+    color: var(--paper);
+    padding: 12px 24px;
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    transition: transform 0.3s;
+    z-index: 200;
+    border-radius: 2px;
+  }
+
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* ============ SETTINGS ============ */
+  .settings-section {
+    margin-bottom: 24px;
+  }
+
+  .settings-label {
+    font-size: 13px;
+    color: var(--ink-faint);
+    letter-spacing: 0.15em;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+
+  .api-input {
+    width: 100%;
+    padding: 12px;
+    background: var(--paper-deep);
+    border: 1px solid var(--paper-shadow);
+    font-family: var(--serif-en);
+    font-size: 13px;
+    color: var(--ink);
+    outline: none;
+  }
+
+  .api-input:focus { border-color: var(--ink); }
+
+  .info-text {
+    font-size: 12px;
+    color: var(--ink-faint);
+    line-height: 1.6;
+    margin-top: 8px;
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-block">
+    <div class="title-hanja">字 種</div>
+    <h1>글의 씨앗</h1>
+    <div class="title-en">— writing seeds —</div>
+  </div>
+  <button class="seal" id="settingsBtn" aria-label="설정">設</button>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" data-view="capture">담기</button>
+  <button class="tab" data-view="list">씨앗방</button>
+</nav>
+
+<!-- CAPTURE VIEW -->
+<section class="view active" id="captureView">
+  <div class="capture-card">
+    <textarea id="thoughtInput" placeholder="머릿속에 떠오른 글감을 적어두세요…"></textarea>
+    <div class="voice-area">
+      <button class="mic-btn" id="micBtn" aria-label="음성 녹음">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="23"/>
+          <line x1="8" y1="23" x2="16" y2="23"/>
+        </svg>
+      </button>
+      <div class="voice-status" id="voiceStatus">탭하여 음성으로 받아쓰기</div>
+    </div>
+  </div>
+  <button class="save-btn" id="saveBtn" disabled>씨 앗  심  기</button>
+  <div class="hint">a fleeting thought, preserved</div>
+</section>
+
+<!-- LIST VIEW -->
+<section class="view" id="listView">
+  <div class="seeds-count" id="seedsCount">— no seeds yet —</div>
+  <div id="seedsList"></div>
+</section>
+
+<!-- DETAIL MODAL -->
+<div class="modal" id="detailModal">
+  <div class="modal-content">
+    <div class="modal-handle"></div>
+    <div class="modal-date" id="modalDate"></div>
+    <div class="modal-text" id="modalText"></div>
+    <div class="modal-actions">
+      <button class="action-btn primary" id="expandBtn">Claude로 아이디어 확장하기</button>
+      <button class="action-btn" id="copyBtn">복사</button>
+      <button class="action-btn danger" id="deleteBtn">삭제</button>
+    </div>
+    <div id="expansionContainer"></div>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="modal" id="settingsModal">
+  <div class="modal-content">
+    <div class="modal-handle"></div>
+    <h2 style="font-size: 20px; letter-spacing: 0.1em; margin-bottom: 24px; font-weight: 500;">設定 · 설정</h2>
+    
+    <div class="settings-section">
+      <div class="settings-label">Anthropic API Key</div>
+      <input type="password" class="api-input" id="apiKeyInput" placeholder="sk-ant-...">
+      <div class="info-text">
+        아이디어 확장 기능을 쓰려면 API 키가 필요합니다.<br>
+        키는 이 기기의 브라우저에만 저장됩니다.
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-label">데이터</div>
+      <button class="action-btn" id="exportBtn" style="width: 100%; margin-bottom: 8px;">JSON으로 내보내기</button>
+      <button class="action-btn" id="importBtn" style="width: 100%;">JSON 가져오기</button>
+      <input type="file" id="importFile" accept=".json" style="display:none;">
+    </div>
+
+    <button class="action-btn primary" id="closeSettings" style="grid-column: 1; width: 100%;">닫기</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(()=>{});
+    });
+  }
+</script>
+</body>
+</html>
